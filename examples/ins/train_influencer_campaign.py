@@ -5,7 +5,7 @@ import torch.nn.functional as F
 INFLUENCER_BRAND_ENCODER = 24
 INFLUENCER_CAMPAIGN_ENCODER = 12
 
-from create_dataset import office_dataloader
+from create_dataset import InfluencerBrandDataset
 
 from LibMTL import Trainer
 from LibMTL.model import resnet18
@@ -38,7 +38,7 @@ def main(params):
                        'weight': [1]} for task in task_name}
     
     # prepare dataloaders
-    data_loader, _ = office_dataloader(dataset=params.dataset, batchsize=params.bs, root_path=params.dataset_path)
+    data_loader, _ = InfluencerBrandDataset(dataset=params.dataset, batchsize=params.bs, root_path=params.dataset_path)
     train_dataloaders = {task: data_loader[task]['train'] for task in task_name}
     val_dataloaders = {task: data_loader[task]['val'] for task in task_name}
     test_dataloaders = {task: data_loader[task]['test'] for task in task_name}

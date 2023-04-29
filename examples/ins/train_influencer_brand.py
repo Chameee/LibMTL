@@ -1,11 +1,13 @@
 import torch, argparse
 import torch.nn as nn
 import torch.nn.functional as F
+from torch.utils.data import DataLoader, Dataset
 
 INFLUENCER_BRAND_ENCODER = 24
 INFLUENCER_CAMPAIGN_ENCODER = 12
+CSV_PATH = './data_txt/acceptance_decision_decisionreputation_postrep_performance_0322.csv'
 
-from create_dataset import office_dataloader
+from create_dataset import InfluencerBrandDataset
 
 from LibMTL import Trainer
 from LibMTL.model import resnet18
@@ -38,10 +40,8 @@ def main(params):
                        'weight': [1]} for task in task_name}
     
     # prepare dataloaders
-    data_loader, _ = office_dataloader(dataset=params.dataset, batchsize=params.bs, root_path=params.dataset_path)
-    train_dataloaders = {task: data_loader[task]['train'] for task in task_name}
-    val_dataloaders = {task: data_loader[task]['val'] for task in task_name}
-    test_dataloaders = {task: data_loader[task]['test'] for task in task_name}
+    influence_brand_dataset = InfluencerBrandDataset(csv_path=CSV_PATH)
+    influence_brand_dataloader = DataLoader(dataset=influence_brand_dataset, batch_size=64)
     
     # define encoder and decoders
     class InfluencerBrandEncoder(nn.Module):
@@ -101,9 +101,7 @@ def main(params):
                           optim_param=optim_param,
                           scheduler_param=scheduler_param,
                           **kwargs)
-    Model.train(train_dataloaders=train_dataloaders,
-                      val_dataloaders=val_dataloaders,
-                      test_dataloaders=test_dataloaders, 
+    Model.train(train_dataloaders=influence_brand_dataloader,
                       epochs=100)
     
 if __name__ == "__main__":
