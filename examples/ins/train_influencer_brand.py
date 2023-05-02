@@ -46,14 +46,14 @@ class AcceptRejectDecoder(nn.Module):
         self.softmax = nn.LogSoftmax(dim=1)
 
     def forward(self, input, hidden):
-#         print('ruming see input', input.shape)
+        print('ruming see input', input.shape)
         embedded = self.embedding(input).view(1, 32, -1)
         output = embedded
-#         print('ruming see output', output.shape)
-#         print('ruming see hidden', hidden.shape)
+        print('ruming see output', output.shape)
+        print('ruming see hidden', hidden.shape)
         output, hidden = self.gru(output, hidden.view(1,32,-1))
         output = self.softmax(self.out(output[0]))
-#         print('ruming see final output', output.shape)
+        print('ruming see final output', output.shape)
         return output, hidden
 
     def initHidden(self):
@@ -79,14 +79,14 @@ class MTLAcceptRejectModel(nn.Module):
         
     def forward(self, x, target=None):
 #         x = self.encode_input(x)
-#         print('ruming see x:', x.shape)
+        print('ruming see x:', x.shape)
         encoded = self.encoder(x)
-#         print('ruming see encode', encoded.shape)
+        print('ruming see encode', encoded.shape)
         output, hidden = self.decoder(torch.zeros(size=[32,1],dtype=torch.long), encoded)
 
         if target is not None:
             loss = nn.CrossEntropyLoss()
-#             print('ruming see target', target.shape)
+            print('ruming see target', target.shape)
             loss_val = loss(output[:, 0].view(1,-1), target.view(1,-1))
             return output, loss_val
         else:
