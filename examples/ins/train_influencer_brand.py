@@ -1,113 +1,165 @@
 import torch, argparse
 import torch.nn as nn
 import torch.nn.functional as F
+import torch.optim as optim
+import numpy as np
 from torch.utils.data import DataLoader, Dataset
 
-INFLUENCER_BRAND_ENCODER = 24
-INFLUENCER_CAMPAIGN_ENCODER = 12
-CSV_PATH = './data_txt/acceptance_decision_decisionreputation_postrep_performance_0322.csv'
 
-from create_dataset import InfluencerBrandDataset
+from create_dataset import CustomDataset, ToNumpyArray
 
-from LibMTL import Trainer
-from LibMTL.model import resnet18
-from LibMTL.utils import set_random_seed, set_device
-from LibMTL.config import LibMTL_args, prepare_args
-import LibMTL.weighting as weighting_method
-import LibMTL.architecture as architecture_method
-from LibMTL.loss import CELoss
-from LibMTL.metrics import AccMetric
+EPOCHS = 10
 
-def parse_args(parser):
-    parser.add_argument('--dataset', default='ins_data', type=str, help='ins_data')
-    parser.add_argument('--bs', default=64, type=int, help='batch size')
-    parser.add_argument('--dataset_path', default='/', type=str, help='dataset path')
-    return parser.parse_args()
+# define encoder and decoders
+class InfluencerBrandEncoder(nn.Module):
+    def __init__(self, input_size, hidden_size, output_size):
+        super(InfluencerBrandEncoder, self).__init__()
 
-def main(params):
-    kwargs, optim_param, scheduler_param = prepare_args(params)
+        self.hidden_size = hidden_size
 
-    if params.dataset == 'ins_data':
-        task_name = ['MTL']
-        class_num = 3
-    else:
-        raise ValueError('No support dataset {}'.format(params.dataset))
-    
-    # define tasks
-    task_dict = {task: {'metrics': ['Acc'],
-                       'metrics_fn': AccMetric(),
-                       'loss_fn': CELoss(),
-                       'weight': [1]} for task in task_name}
-    
-    # prepare dataloaders
-    influence_brand_dataset = InfluencerBrandDataset(csv_path=CSV_PATH)
-    influence_brand_dataloader = DataLoader(dataset=influence_brand_dataset, batch_size=64)
-    
-    # define encoder and decoders
-    class InfluencerBrandEncoder(nn.Module):
-        def __init__(self):
-            super(InfluencerBrandEncoder, self).__init__()
-            hidden_dim = 512
-            self.hidden_layer_list = [nn.Linear(INFLUENCER_BRAND_ENCODER, hidden_dim),
-                                      nn.BatchNorm1d(hidden_dim), nn.ReLU(), nn.Dropout(0.5)]
-            self.hidden_layer = nn.Sequential(*self.hidden_layer_list)
+        self.inf_brand_encoder = nn.Sequential(
+            nn.Linear(input_size, hidden_size),
+            nn.ReLU(),
+            nn.Linear(hidden_size, hidden_size),
+            nn.ReLU(),
+            nn.Linear(hidden_size, output_size),
+            nn.ReLU()
+        )
 
-            # initialization
-            self.hidden_layer[0].weight.data.normal_(0, 0.005)
-            self.hidden_layer[0].bias.data.fill_(0.1)
+    def forward(self, x):
+        x = x.float()
+        x = self.inf_brand_encoder(x)
+        return x
+
+
+class AcceptRejectDecoder(nn.Module):
+    def __init__(self, input_size, hidden_size, output_size):
+        super(AcceptRejectDecoder, self).__init__()
+
+        self.hidden_size = hidden_size
+        self.output_size = output_size
+
+        self.embedding = nn.Embedding(input_size, hidden_size)
+        self.gru = nn.GRU(hidden_size, hidden_size)
+        self.out = nn.Linear(hidden_size, output_size)
+        self.softmax = nn.LogSoftmax(dim=1)
+
+    def forward(self, input, hidden):
+        embedded = self.embedding(input).view(1, 32, -1)
+        output = embedded
+        output, hidden = self.gru(output, hidden)
+        output = self.softmax(self.out(output[0]))
+        return output, hidden
+
+    def initHidden(self):
+        return torch.zeros(1, 1, self.hidden_size, device=device)
+                
             
-        def forward(self, inputs):
-            out = inputs
-            out = torch.flatten(out)
-            out = self.hidden_layer(out)
-            return out
 
-    class InfluencerCampaignEncoder(nn.Module):
-        def __init__(self):
-            super(InfluencerCampaignEncoder, self).__init__()
-            hidden_dim = 512
-            self.hidden_layer_list = [nn.Linear(INFLUENCER_CAMPAIGN_ENCODER, hidden_dim),
-                                      nn.BatchNorm1d(hidden_dim), nn.ReLU(), nn.Dropout(0.5)]
-            self.hidden_layer = nn.Sequential(*self.hidden_layer_list)
-
-            # initialization
-            self.hidden_layer[0].weight.data.normal_(0, 0.005)
-            self.hidden_layer[0].bias.data.fill_(0.1)
-
-        def forward(self, inputs):
-            out = inputs
-            out = torch.flatten(out)
-            out = self.hidden_layer(out)
-            return out
-
-    class MTLEncoder(nn.Module):
-        def __init__(self):
-            super(MTLEncoder, self).__init__()
-            self.influencer_brand_encoder = InfluencerBrandEncoder()
-            self.influencer_campaign_encoder = InfluencerCampaignEncoder()
-
-
-
-    influencer_brand_decoders = nn.ModuleDict({task: nn.Linear(512, 1) for task in list(task_dict.keys())})
-    influencer_campaign_decoders = nn.ModuleDict({task: nn.Linear(512, 3) for task in list(task_dict.keys())})
-
-    Model = Trainer(task_dict=task_dict,
-                          weighting=weighting_method.__dict__[params.weighting], 
-                          architecture=architecture_method.__dict__[params.arch], 
-                          encoder_class=InfluencerBrandEncoder,
-                          decoders=influencer_brand_decoders,
-                          rep_grad=params.rep_grad,
-                          multi_input=params.multi_input,
-                          optim_param=optim_param,
-                          scheduler_param=scheduler_param,
-                          **kwargs)
-    Model.train(train_dataloaders=influence_brand_dataloader,
-                      epochs=100)
     
+class MTLAcceptRejectModel(nn.Module):
+    def __init__(self, input_size, encoder_hidden_size, encoder_output_size, decoder_hidden_size):
+        super(MTLAcceptRejectModel, self).__init__()
+
+        self.encoder = InfluencerBrandEncoder(input_size, encoder_hidden_size, encoder_output_size)
+        self.decoder = AcceptRejectDecoder(encoder_output_size, decoder_hidden_size, 2)
+#         self.category_feature_names = ['status', 'country_x', 'macromicro', 'listedby']
+#         self.numerical_feature_names = ['decision_media_gained', 'decision_media_total',
+#        'decision_followers_gained', 'decision_followers_total',
+#        'decision_following_gained', 'decision_following_total',
+#       'aftercamp_media_gained', 'aftercamp_media_total',
+#        'aftercamp_followers_gained', 'aftercamp_followers_total',
+#        'aftercamp_following_gained', 'aftercamp_following_total',
+#       'follower_num']
+        
+    def forward(self, x, target=None):
+#         x = self.encode_input(x)
+        encoded = self.encoder(x)
+        output, hidden = self.decoder(torch.tensor([0]), encoded)
+
+        if target is not None:
+            loss = nn.CrossEntropyLoss()
+            loss_val = loss(output, target)
+            return output, loss_val
+        else:
+            return output
+    
+#     def encode_input(self, x):
+#         # Encode categorical strings as one-hot vectors'
+#         category_features_list = []
+#         for feat in self.category_feature_names:
+#             category_features = pd.get_dummies(x[feat]).values
+#             category_features_list.append(category_features)
+
+#         # Normalize numerical features
+#         numerical_features_list = []
+#         for feat in self.numerical_feature_names:
+#             numerical_features = x[[feat]].values.astype(np.float32)
+#             numerical_features = (numerical_features - numerical_features.mean(axis=0)) / numerical_features.std(axis=0)
+
+#         # Concatenate categorical and numerical features
+#         features = np.concatenate(category_features + numerical_features, axis=1)
+        
+#         print('ruming_see feature size', features.size())
+#         return features
+
+    def predict(self, x):
+        with torch.no_grad():
+            encoded = self.encoder(x)
+            output, hidden = self.decoder(torch.tensor([0]), encoded)
+            return output.argmax().item()
+
+
+
+def main():
+    # Example usage
+    train_file = './acceptance_decision_decisionreputation_postrep_performance_0322.csv'
+    test_file = './acceptance_decision_decisionreputation_postrep_performance_0322.csv'
+    batch_size = 32
+    input_size = 388
+    encoder_hidden_size = 128
+    encoder_output_size = 64
+    decoder_hidden_size = 64
+
+    train_dataset = CustomDataset(train_file)
+    test_dataset = CustomDataset(test_file)
+
+    train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+    test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
+
+    model = MTLAcceptRejectModel(input_size, encoder_hidden_size, encoder_output_size, decoder_hidden_size)
+
+    optimizer = optim.Adam(model.parameters())
+
+    # Training loop
+    for epoch in range(EPOCHS):
+        for i, batch in enumerate(train_loader):
+            x_batch, y_batch = batch
+
+            optimizer.zero_grad()
+            output, loss_val = model(x_batch, y_batch)
+            loss_val.backward()
+            optimizer.step()
+
+            # Print loss
+            if (i + 1) % 100 == 0:
+                print('Epoch [{}/{}], Step [{}/{}], Loss: {:.4f}'.format(epoch+1, EPOCHS, i+1, len(train_loader), loss_val.item()))
+
+                
+    # Testing loop
+    with torch.no_grad():
+        correct = 0
+        total = 0
+
+        for batch in test_loader:
+            x_batch, y_batch = batch
+
+            output = model(x_batch)
+            predicted = output.argmax(dim=1)
+
+            total += y_batch.size(0)
+            correct += (predicted == y_batch).sum().item()
+
+        print('Accuracy: {:.2f}%'.format(100 * correct / total))
 if __name__ == "__main__":
-    params = parse_args(LibMTL_args)
-    # set device
-    set_device(params.gpu_id)
-    # set random seed
-    set_random_seed(params.seed)
-    main(params)
+    main()
