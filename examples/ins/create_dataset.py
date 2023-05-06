@@ -42,6 +42,8 @@ class CustomDataset(torch.utils.data.Dataset):
         # Concatenate categorical and numerical features
         features = np.concatenate(category_features_list + numerical_features_list, axis=1)
         
+        # Here to See Feature dims
+        print('See Feature Shape:', features.shape)
         self.x = features
         self.y = self.y.to_numpy()
         
