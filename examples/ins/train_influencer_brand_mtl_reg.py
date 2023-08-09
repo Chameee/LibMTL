@@ -55,7 +55,7 @@ class MTLInfluencer(nn.Module):
 
 def main():
     # Example usage
-    all_file = 'acc_v5.csv'
+    all_file = 'acc_v6.csv'
 #     train_file = 'acc_v2.csv'
 #     test_file = 'acc_v2.csv'
     batch_size = 64
@@ -63,7 +63,7 @@ def main():
     encoder_hidden_size = 64
     encoder_output_size = 32
     decoder_hidden_size = 32
-    n_epochs = 50
+    n_epochs = 100
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print("device", device)
     

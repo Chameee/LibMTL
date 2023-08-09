@@ -54,7 +54,7 @@ class MTLInfluencer(nn.Module):
 
 def main():
     # Example usage
-    all_file = 'acc_v5.csv'
+    all_file = 'acc_v6.csv'
 #     train_file = 'acc_v2.csv'
 #     test_file = 'acc_v2.csv'
     batch_size = 64
@@ -62,7 +62,7 @@ def main():
     encoder_hidden_size = 64
     encoder_output_size = 32
     decoder_hidden_size = 32
-    n_epochs = 50
+    n_epochs = 100
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print("device", device)
     
@@ -163,7 +163,7 @@ def main():
 
         mse_revenue = mean_squared_error(y_true=y2_label_array, y_pred=y2_predict_array)
         r2_revenue = r2_score(y_true=y2_label_array, y_pred=y2_predict_array)
-        print('y3 MSE, R2: {:.2f} {:.2f}'.format(mse_revenue, r2_revenue))
+        print('y2 MSE, R2: {:.2f} {:.2f}'.format(mse_revenue, r2_revenue))
 
 
 #         mse_reputation = mean_squared_error(y_true=y3_label_array, y_pred=y3_predict_array)
