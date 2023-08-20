@@ -116,8 +116,10 @@ class CustomDataset(torch.utils.data.Dataset):
         'num_posts_7days'
         ]]
         self.y1 = self.data[['accept']]
-        self.y2 = self.data[['Revenue_reg']]
-        self.y3 = self.data[['reputation_change_reg']]
+#         self.y2 = self.data[['Revenue_reg']]
+#         self.y3 = self.data[['reputation_change_reg']]
+        self.y2 = self.data[['Revenue']]
+        self.y3 = self.data[['reputation_change_v2']]
         
         #self.category_feature_names = [, 'year', 'month']
         self.category_feature_names = ['country_y', 'yearmonth']

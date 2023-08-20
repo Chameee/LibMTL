@@ -107,7 +107,7 @@ def main():
             loss_2 = revenue_loss(sig(revenue_output), revenue_label)
             loss_3 = reputation_loss(sig(reputation_output), reputation_label)
 
-            loss = loss_1 + loss_2 + loss_3
+            loss = 2.0 * loss_1 + 0.000015 * loss_2 +  0.000005 * loss_3
             loss.backward()
             optimizer.step()
 
@@ -168,5 +168,5 @@ def main():
 
 if __name__ == "__main__":
     import os 
-    os.environ['CUDA_VISIBLE_DEVICES'] = '4'
+    os.environ['CUDA_VISIBLE_DEVICES'] = '1'
     main()
